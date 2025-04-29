@@ -26,18 +26,18 @@ from functions_and_classes import AudioUtil, SoundDS, training, inference
 #device = 'cpu' # Uncomment to use cpu instead of gpu (likely slower)
 
 data_folder = 'BOAS-mobilljud'
-max_runs = 3
+max_runs = 3 # The number of runs that the model is trained, from which the model with the best validation results are automatically chosen.
 
-use_sliced_data = False
-use_augmented_data = True
-augmented_folder_suffix = '_psts'
-val_folds = [1]
+use_2_classes = True # Simplifies the model from the four BOAS grades to only 2, BOAS negative (0&1) and BOAS positive (2&3).
+use_exercise_test = True # Makes it so the model only trains on audio from after exercise test.
+filter_signal = True # If the adaptive high-pass filter should be used.
+use_sliced_data = True # If sliced data should be used.
+use_augmented_data = False # If offline-augmented data should be used.
+augmented_folder_suffix = '' # If a specific augmentation should be used, defined when augmenting the data.
+val_fold = 1 # The fold that should not be included in training (K fold cross-validation).
 
 separate_augments = False # Used iff use_augmented_data = True. Use True for one augmented version per original data per epoch, False if all augmented data each epoch.
 
-filter_signal = True # If the adaptive high-pass filter should be used.
-use_2_classes = True # Simplifies the model from the four BOAS grades to only 2, BOAS negative (0&1) and BOAS positive (2&3).
-use_exercise_test = True # Makes it so the model only trains on audio from after exercise test.
 before_and_after_et = False # Overrides use_exercise_test. Makes it so the model trains on audio from both before and after exercise test, and any audio where that is uncertain.
 hybrid_et = False # Used iff before_and_after_et = True. Makes it so each input contains two files, one from before et and the other from the same dog after et.
 make_et_class = False # Used iff before_and_after_et = True, and overrides use_2_class. Makes it so the model now trains to determine if the audio is from before or after exercise test. Does not work with hybrid_et = True.
@@ -86,6 +86,8 @@ else:
 # ------------------
 #   Main execution
 # ------------------
+
+val_folds = [val_fold]
 
 # Prepare names for saving
 slice_part_of_name = 'no'*(not use_sliced_data)+'slice'
@@ -207,13 +209,14 @@ while train_new_model:
 
     # Print model summary
     input_shape = list(np.shape(val_ds.__getitem__(0)[0].unsqueeze(0)))
-    print('Model summary :')
-    summary(myModel, input_shape)
+    if i_run == 1:
+        print('Model summary :')
+        summary(myModel, input_shape)
 
-    # Check that it is on Cuda (or not)
-    print(f'Current device: {next(myModel.parameters()).device}')
+        # Check that it is on Cuda (or not)
+        print(f'Current device: {next(myModel.parameters()).device}')
 
-    print(f'Run {i_run}')
+    print(f'\nRun {i_run}')
 
     # Train model
     myModel.train()
@@ -249,37 +252,44 @@ while train_new_model:
         train_new_model = True
 
 # Final inference checks and roc with plots
+print('\nFinal Inference')
 bestModel.eval()
 inference(bestModel, val_dl, device, do_plot=True)
 inference(bestModel, train_dl, device, do_plot=True)
 
 # Save model based on user input
-print(f'Save name: {save_name}')
+print(f'\nSave name: {save_name}')
 user_input = input('Do you want to save the model? (yes/no): ')
-if user_input.lower() in ['yes', 'y']:
+if not user_input.lower() in ['yes', 'y']:
+    user_input = input('Are you sure? The model will disappear permanently if yes. (yes/no): ')
+    if not user_input.lower() in ['no', 'n', 'save']:
+        print('Did not save')
+        quit()
 
-    # Save training plot
-    if fig_bestModel != None:
-        figures_path = BOAS_folder_path/'Figures'
-        Path(figures_path).mkdir(parents=True, exist_ok=True)
-        save_training_plot_filename += '.png'
-        fig_bestModel.savefig(figures_path/save_training_plot_filename)
+# Save training plot
+if fig_bestModel != None:
+    figures_path = BOAS_folder_path/'Figures'
+    Path(figures_path).mkdir(parents=True, exist_ok=True)
+    save_training_plot_filename += '.png'
+    fig_bestModel.savefig(figures_path/save_training_plot_filename)
 
-    # Turn model on evaluation mode before exporting
-    bestModel.eval()
+# Turn model on evaluation mode before exporting
+bestModel.eval()
 
-    # Save model
-    save_path = script_path/'Models'
-    Path(save_path).mkdir(parents=True, exist_ok=True)
+# Save model
+save_path = script_path/'Models'
+Path(save_path).mkdir(parents=True, exist_ok=True)
 
-    # as torch file
-    torch.save(bestModel.state_dict(), save_path/save_name)
+# as torch file
+torch.save(bestModel.state_dict(), save_path/save_name)
 
-    # as onnx file
-    torch.onnx.export(
-        bestModel,
-        val_ds.__getitem__(0)[0].unsqueeze(0).to(device),
-        save_path/(save_name+'.onnx'),
-        export_params=True,
-        do_constant_folding=True
-    )
+# as onnx file
+torch.onnx.export(
+    bestModel,
+    val_ds.__getitem__(0)[0].unsqueeze(0).to(device),
+    save_path/(save_name+'.onnx'),
+    export_params=True,
+    do_constant_folding=True
+)
+
+print('Did save')
