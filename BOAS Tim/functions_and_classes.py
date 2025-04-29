@@ -663,6 +663,9 @@ def training(model, train_df, data_path, duration, sr, batch_size, val_dl, num_e
                     if val_loss_list[epoch]+loss_list[epoch] < lowest_loss:
                         lowest_loss = val_loss_list[epoch]+loss_list[epoch]
                         bestModel = copy.deepcopy(model)
+
+            elif epoch+1 == num_epochs and bestModel is None:
+                bestModel = copy.deepcopy(model)
          
         end = time() 
         
