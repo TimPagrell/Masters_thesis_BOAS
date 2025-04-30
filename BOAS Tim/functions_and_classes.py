@@ -477,8 +477,7 @@ class SoundDS(Dataset):
 
             # Read file audio
             audio = AudioUtil.open(audio_file)
-
-            audio = AudioUtil.open(audio_file)
+            
             # Some sounds have a higher sample rate, or fewer channels compared to the
             # majority. So make all sounds have the same number of channels and same 
             # sample rate. Unless the sample rate is the same, the pad_trunc will still
